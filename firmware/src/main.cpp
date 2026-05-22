@@ -4,6 +4,7 @@
  */
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <Wire.h>
@@ -22,11 +23,17 @@
 #define MQTT_PORT 1883
 #define MQTT_USER ""
 #define MQTT_PASS ""
+#define MQTT_SECURE false
 #define DEVICE_ID "esp32-01"
 #endif
 
+#ifndef MQTT_SECURE
+#define MQTT_SECURE false
+#endif
+
 static WiFiClient wifiClient;
-static PubSubClient mqtt(wifiClient);
+static WiFiClientSecure secureWifiClient;
+static PubSubClient mqtt; // Client is set dynamically in setup()
 static LiquidCrystal_I2C lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS);
 
 static float cei = 0;
@@ -81,6 +88,15 @@ void setup() {
   struct tm timeinfo;
   for (int i = 0; i < 20 && !getLocalTime(&timeinfo); i++) {
     delay(500);
+  }
+
+  if (MQTT_SECURE) {
+    secureWifiClient.setInsecure(); // Enable TLS/SSL connection without hardcoding CA
+    mqtt.setClient(secureWifiClient);
+    Serial.println("MQTT: Secure TLS mode enabled");
+  } else {
+    mqtt.setClient(wifiClient);
+    Serial.println("MQTT: Unsecure TCP mode enabled");
   }
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
