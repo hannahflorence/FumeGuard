@@ -1,0 +1,27 @@
+{
+  "name": "fumeguard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "IoT solder fume monitoring with MQTT, Firebase, and React dashboard",
+  "workspaces": [
+    "packages/shared",
+    "server",
+    "web",
+    "tools/mqtt-simulator"
+  ],
+  "scripts": {
+    "build": "npm run build -w @fumeguard/shared && npm run build -w @fumeguard/server && npm run build -w @fumeguard/web",
+    "dev:server": "npm run dev -w @fumeguard/server",
+    "dev:web": "npm run dev -w @fumeguard/web",
+    "dev:simulator": "npm run dev -w @fumeguard/mqtt-simulator",
+    "emulators": "firebase emulators:start --only database,auth",
+    "seed": "npm run seed -w @fumeguard/server",
+    "broker": "docker compose up -d mosquitto"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "firebase-tools": "^1.2.0"
+  }
+}

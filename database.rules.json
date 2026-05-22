@@ -1,0 +1,29 @@
+{
+  "rules": {
+    "config": {
+      ".read": "auth != null || true",
+      ".write": false
+    },
+    "devices": {
+      "$deviceId": {
+        ".read": "auth != null || true",
+        ".write": false,
+        "latest": {
+          ".read": true
+        },
+        "history": {
+          ".read": true,
+          ".indexOn": ["ts"]
+        },
+        "sessions": {
+          ".read": true,
+          ".indexOn": ["startedAt", "endedAt"]
+        },
+        "events": {
+          ".read": true,
+          ".indexOn": ["ts"]
+        }
+      }
+    }
+  }
+}

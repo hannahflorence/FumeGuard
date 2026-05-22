@@ -1,0 +1,27 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+.DS_Store
+
+# Firebase
+.firebase/
+firebase-debug.log
+database-debug.log
+ui-debug.log
+pubsub-debug.log
+storage-debug.log
+serviceAccountKey.json
+
+# IDE
+.vscode/
+.idea/
+
+# Firmware secrets
+firmware/include/secrets.h
+firmware/.pio/
+
+# OS
+Thumbs.db
