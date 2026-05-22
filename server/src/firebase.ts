@@ -9,6 +9,8 @@ export function getFirebaseApp(): admin.app.App {
   if (config.useFirebaseEmulator) {
     process.env.FIREBASE_DATABASE_EMULATOR_HOST =
       config.firebaseDatabaseEmulatorHost;
+    // .env may still set this for production; Admin SDK must not load a missing file locally
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
   }
 
   if (!admin.apps.length) {
