@@ -26,7 +26,7 @@ export function HistoryTable({ rows }: { rows: HistoryPoint[] }) {
           </tr>
         </thead>
         <tbody>
-          {[...rows].reverse().map((row) => (
+          {rows.map((row) => (
             <tr key={row.id} className="border-b border-slate-800/80 hover:bg-slate-800/40">
               <td className="px-4 py-2 text-slate-300">{formatTs(row.ts)}</td>
               <td className="px-4 py-2">{row.gasPpm.toFixed(1)}</td>

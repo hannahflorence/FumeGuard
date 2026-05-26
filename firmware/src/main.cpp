@@ -1,6 +1,6 @@
 /**
  * FumeGuard ESP32 firmware
- * MQ-135 gas, GP2Y1014AU dust, relay fan, LED, I2C LCD, MQTT telemetry
+ * MQ-135 gas, GP2Y1014AU dust, relay fan, status LEDs, buzzer, SH1106 OLED, MQTT telemetry
  */
 #include <Arduino.h>
 #include <WiFi.h>
@@ -8,7 +8,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <U8g2lib.h>
 #include <time.h>
 
 #include "config.h"
@@ -31,10 +31,11 @@
 #define MQTT_SECURE false
 #endif
 
+static U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+
 static WiFiClient wifiClient;
 static WiFiClientSecure secureWifiClient;
-static PubSubClient mqtt; // Client is set dynamically in setup()
-static LiquidCrystal_I2C lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS);
+static PubSubClient mqtt;
 
 static float cei = 0;
 static unsigned long lastTelemetryMs = 0;
@@ -43,14 +44,16 @@ static unsigned long lastTs = 0;
 static bool fanOn = false;
 static bool ledOn = false;
 static bool prevFanOn = false;
+static bool alarmArmed = true;
 static String lastStatus = "safe";
 
 static float readMq135Ppm();
 static float readDustUgM3();
 static float computeLoad(float gas, float dust);
 static String deriveStatus(float gas, float dust, float ceiVal);
+static void setRelay(bool on);
 static void updateActuators(const String& status);
-static void updateLcd(float gas, float dust, float ceiVal, const String& status);
+static void updateOled(float gas, float dust, float ceiVal, const String& status);
 static void publishTelemetry();
 static void publishEvent(const char* type, const char* message);
 static void reconnectMqtt();
@@ -58,22 +61,32 @@ static long long nowEpochMs();
 
 void setup() {
   Serial.begin(115200);
+
+  pinMode(PIN_SYS_LED, OUTPUT);
+  pinMode(PIN_LED_GREEN, OUTPUT);
+  pinMode(PIN_LED_YELLOW, OUTPUT);
+  pinMode(PIN_LED_RED, OUTPUT);
+  pinMode(PIN_BUZZER, OUTPUT);
   pinMode(PIN_RELAY, OUTPUT);
-  pinMode(PIN_LED_ALERT, OUTPUT);
   pinMode(PIN_DUST_LED, OUTPUT);
   pinMode(PIN_MQ135, INPUT);
   pinMode(PIN_DUST_AO, INPUT);
 
-  digitalWrite(PIN_RELAY, LOW);
-  digitalWrite(PIN_LED_ALERT, LOW);
-  digitalWrite(PIN_DUST_LED, LOW);
+  digitalWrite(PIN_LED_GREEN, LOW);
+  digitalWrite(PIN_LED_YELLOW, LOW);
+  digitalWrite(PIN_LED_RED, LOW);
+  digitalWrite(PIN_BUZZER, LOW);
+  digitalWrite(PIN_DUST_LED, HIGH);
+  setRelay(false);
+  digitalWrite(PIN_SYS_LED, HIGH);
 
-  Wire.begin();
-  lcd.init();
-  lcd.backlight();
-  lcd.print("FumeGuard");
-  lcd.setCursor(0, 1);
-  lcd.print("Starting...");
+  Wire.begin(I2C_SDA, I2C_SCL);
+  u8g2.begin();
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr(20, 32, "FumeGuard");
+  u8g2.drawStr(12, 48, "Starting...");
+  u8g2.sendBuffer();
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -91,7 +104,7 @@ void setup() {
   }
 
   if (MQTT_SECURE) {
-    secureWifiClient.setInsecure(); // Enable TLS/SSL connection without hardcoding CA
+    secureWifiClient.setInsecure();
     mqtt.setClient(secureWifiClient);
     Serial.println("MQTT: Secure TLS mode enabled");
   } else {
@@ -103,8 +116,9 @@ void setup() {
   mqtt.setBufferSize(512);
   reconnectMqtt();
 
-  lcd.clear();
-  lcd.print("MQTT ready");
+  u8g2.clearBuffer();
+  u8g2.drawStr(16, 32, "MQTT ready");
+  u8g2.sendBuffer();
 }
 
 void loop() {
@@ -134,7 +148,7 @@ void loop() {
 
   String status = deriveStatus(gas, dust, cei);
   updateActuators(status);
-  updateLcd(gas, dust, cei, status);
+  updateOled(gas, dust, cei, status);
 
   if (status != lastStatus) {
     if (status == "hazardous") {
@@ -207,18 +221,77 @@ static String deriveStatus(float gas, float dust, float ceiVal) {
   return "safe";
 }
 
-static void updateActuators(const String& status) {
-  fanOn = (status == "hazardous");
-  ledOn = (status != "safe");
-  digitalWrite(PIN_RELAY, fanOn ? HIGH : LOW);
-  digitalWrite(PIN_LED_ALERT, ledOn ? HIGH : LOW);
+static void setRelay(bool on) {
+#if RELAY_ACTIVE_LOW
+  digitalWrite(PIN_RELAY, on ? LOW : HIGH);
+#else
+  digitalWrite(PIN_RELAY, on ? HIGH : LOW);
+#endif
 }
 
-static void updateLcd(float gas, float dust, float ceiVal, const String& status) {
-  lcd.setCursor(0, 0);
-  lcd.printf("G:%4.0f D:%3.0f", gas, dust);
-  lcd.setCursor(0, 1);
-  lcd.printf("C:%5.0f %-7s", ceiVal, status.c_str());
+static void updateActuators(const String& status) {
+  digitalWrite(PIN_LED_GREEN, LOW);
+  digitalWrite(PIN_LED_YELLOW, LOW);
+  digitalWrite(PIN_LED_RED, LOW);
+  digitalWrite(PIN_BUZZER, LOW);
+
+  bool newFanOn = fanOn;
+
+  if (status == "safe") {
+    digitalWrite(PIN_LED_GREEN, HIGH);
+    newFanOn = false;
+    alarmArmed = true;
+    ledOn = false;
+  } else if (status == "warning") {
+    digitalWrite(PIN_LED_YELLOW, HIGH);
+    newFanOn = true;
+    ledOn = true;
+    if (alarmArmed) {
+      digitalWrite(PIN_BUZZER, HIGH);
+      delay(120);
+      digitalWrite(PIN_BUZZER, LOW);
+      alarmArmed = false;
+    }
+  } else {
+    digitalWrite(PIN_LED_RED, HIGH);
+    newFanOn = true;
+    ledOn = true;
+    if (alarmArmed) {
+      digitalWrite(PIN_BUZZER, HIGH);
+      delay(300);
+      digitalWrite(PIN_BUZZER, LOW);
+      alarmArmed = false;
+    }
+  }
+
+  if (newFanOn != fanOn) {
+    fanOn = newFanOn;
+    setRelay(fanOn);
+  }
+}
+
+static void updateOled(float gas, float dust, float ceiVal, const String& status) {
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr(25, 10, "FUME GUARD");
+
+  u8g2.setCursor(0, 25);
+  u8g2.print("Gas:");
+  u8g2.print((int)gas);
+
+  u8g2.setCursor(0, 37);
+  u8g2.print("Dust:");
+  u8g2.print((int)dust);
+
+  u8g2.setCursor(0, 49);
+  u8g2.print("CEI:");
+  u8g2.print((int)ceiVal);
+
+  u8g2.setCursor(0, 61);
+  u8g2.print("Status:");
+  u8g2.print(status);
+
+  u8g2.sendBuffer();
 }
 
 static void publishTelemetry() {

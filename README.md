@@ -16,7 +16,7 @@ ESP32 / Simulator ──MQTT──► Mosquitto ──► Node server ──► 
 
 | Path | Description |
 |------|-------------|
-| `firmware/` | ESP32 PlatformIO firmware (MQ-135, GP2Y1014AU, relay, LED, LCD) |
+| `firmware/` | ESP32 PlatformIO firmware (MQ-135, GP2Y1014AU, relay, LEDs, buzzer, OLED) |
 | `server/` | MQTT → Firebase bridge with CEI and session tracking |
 | `web/` | React + Vite dashboard |
 | `tools/mqtt-simulator/` | Dev sensor publisher (no hardware) |
@@ -187,7 +187,7 @@ See [`.env.example`](.env.example) for all options.
 
 ## Hardware (proposal)
 
-- ESP32, MQ-135, GP2Y1014AU, relay module, exhaust fan, LED, I2C 16×2 LCD, PSU
+- ESP32-WROOM-DA, MQ-135 (GPIO13), GP2Y1014AU (GPIO27/35), relay (GPIO26), RGB status LEDs, buzzer, SH1106 OLED (I2C 21/22), PSU
 
 ## License
 

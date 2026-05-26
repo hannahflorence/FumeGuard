@@ -26,7 +26,7 @@ FumeGuard/
 │   │   ├── secrets.h.example    # Copy → secrets.h (WiFi, MQTT, DEVICE_ID)
 │   │   └── secrets.h            # **Local only — not in git**
 │   └── src/
-│       └── main.cpp             # Sensors, fan/LED/LCD, MQTT publish
+│       └── main.cpp             # Sensors, fan/LEDs/OLED, MQTT publish
 │
 ├── infra/
 │   └── mosquitto/
